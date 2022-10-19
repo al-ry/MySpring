@@ -8,7 +8,7 @@ public class TestObjectFactory {
 
     @Test
     public void test() {
-        TestInterface instance = ObjectFactory.getInstance().getInstance(TestInterface.class);
+        TestInterface instance = ObjectFactory.getInstance().createObject(TestInterface.class);
         Assert.assertEquals("some info", instance.test());
     }
 }
