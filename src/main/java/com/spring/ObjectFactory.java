@@ -1,51 +1,67 @@
 package com.spring;
 
-import com.spring.annotations.InjectProperty;
-import com.spring.configurators.ObjectConfigurator;
-import com.spring.testclasses.TestClass;
-import com.spring.testclasses.TestInterface;
+import com.spring.configurators.object.ObjectConfigurator;
+import com.spring.configurators.proxy.ProxyConfigurator;
 import lombok.SneakyThrows;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class ObjectFactory {
-    private static ObjectFactory INSTANCE = new ObjectFactory();
-    private Config config;
-    private List<ObjectConfigurator> configurators = new ArrayList<>();
+    private final ApplicationContext context;
+    private List<ObjectConfigurator> objectConfigurators = new ArrayList<>();
+    private List<ProxyConfigurator> proxyConfigurators = new ArrayList<>();
 
     @SneakyThrows
-    public ObjectFactory() {
-        this.config = new JavaConfig("com.spring", new HashMap<>(Map.of(TestInterface.class, TestClass.class)));
-        for (Class<? extends ObjectConfigurator> objectConfigurator : config.getScanner().getSubTypesOf(ObjectConfigurator.class)) {
-            configurators.add(objectConfigurator.getDeclaredConstructor().newInstance());
+    public ObjectFactory(ApplicationContext context) {
+        this.context = context;
+        for (Class<? extends ObjectConfigurator> objectConfigurator : context.getConfig().getScanner().getSubTypesOf(ObjectConfigurator.class)) {
+            objectConfigurators.add(objectConfigurator.getDeclaredConstructor().newInstance());
+        }
+        for (Class<? extends ProxyConfigurator> proxyConfigurator : context.getConfig().getScanner().getSubTypesOf(ProxyConfigurator.class)) {
+            proxyConfigurators.add(proxyConfigurator.getDeclaredConstructor().newInstance());
         }
     }
 
-    public static ObjectFactory getInstance() {
-        return INSTANCE;
-    }
-
     @SneakyThrows
-    public  <T> T createObject(Class<T> type) {
-        Class<? extends T> implClass = type;
-        if (type.isInterface()) {
-            implClass = config.getImplClass(type);
-        }
+    public <T> T createObject(Class<T> implClass) {
 
-        T t = implClass.getDeclaredConstructor().newInstance();
+        T t = create(implClass);
         // check for fields from derived classes
 
-        configurators.forEach(objectConfigurator -> objectConfigurator.configure(t));
+        configureObject(t);
 
+        postInit(t);
+
+
+        // todo deprecated only for class, need for method
+        for (ProxyConfigurator proxyConfigurator : proxyConfigurators) {
+            t = (T)proxyConfigurator.useProxyIfNeeded(t, implClass);
+        }
+
+        return t;
+    }
+
+    @SneakyThrows
+    private <T> void postInit(T t) {
+        for (Method method : t.getClass().getMethods()) {
+            if (method.isAnnotationPresent(PostConstruct.class)) {
+                method.invoke(t);
+            }
+        }
+
+    }
+
+    private <T> void configureObject(T t) {
+        objectConfigurators.forEach(objectConfigurator -> objectConfigurator.configure(t, context));
+    }
+
+    private static <T> T create(Class<T> implClass) throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
+        T t = implClass.getDeclaredConstructor().newInstance();
         return t;
     }
 }

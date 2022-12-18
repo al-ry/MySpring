@@ -1,5 +1,6 @@
-package com.spring.configurators;
+package com.spring.configurators.object;
 
+import com.spring.ApplicationContext;
 import com.spring.annotations.InjectProperty;
 import lombok.SneakyThrows;
 
@@ -25,7 +26,7 @@ public class InjectPropertyAnnotationObjectConfigurator implements ObjectConfigu
 
     @Override
     @SneakyThrows
-    public void configure(Object obj) {
+    public void configure(Object obj, ApplicationContext context) {
         for (Field declaredField : obj.getClass().getDeclaredFields()) {
             InjectProperty annotation = declaredField.getAnnotation(InjectProperty.class);
 
